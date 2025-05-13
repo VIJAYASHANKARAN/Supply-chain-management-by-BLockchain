@@ -1,0 +1,173 @@
+// Gemini API Configuration
+const GEMINI_API_KEY = 'YOUR_API_KEY'; // Replace with your actual API key
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+
+// DOM Elements
+const chatbotContainer = document.getElementById('chatbotContainer');
+const openChatbotBtn = document.getElementById('openChatbot');
+const closeChatbotBtn = document.getElementById('closeChatbot');
+const chatMessages = document.getElementById('chatMessages');
+const userMessageInput = document.getElementById('userMessage');
+const sendMessageBtn = document.getElementById('sendMessage');
+
+// Chatbot state
+let isChatbotOpen = false;
+let conversationHistory = [
+    {
+        role: "model",
+        parts: [{ text: "Hello! I'm your Supply Chain Assistant. How can I help you today?" }]
+    }
+];
+
+// Event Listeners
+openChatbotBtn.addEventListener('click', toggleChatbot);
+closeChatbotBtn.addEventListener('click', toggleChatbot);
+sendMessageBtn.addEventListener('click', sendMessage);
+userMessageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
+});
+
+// Toggle chatbot visibility
+function toggleChatbot() {
+    isChatbotOpen = !isChatbotOpen;
+    chatbotContainer.style.display = isChatbotOpen ? 'block' : 'none';
+    openChatbotBtn.style.display = isChatbotOpen ? 'none' : 'block';
+    
+    if (isChatbotOpen) {
+        userMessageInput.focus();
+    }
+}
+
+// Send message to Gemini API
+async function sendMessage() {
+    const message = userMessageInput.value.trim();
+    if (!message) return;
+
+    // Add user message to chat
+    addMessageToChat('user', message);
+    userMessageInput.value = '';
+    
+    // Add loading indicator
+    const loadingId = addLoadingIndicator();
+    
+    try {
+        // Add to conversation history
+        conversationHistory.push({
+            role: "user",
+            parts: [{ text: message }]
+        });
+
+        // Call Gemini API
+        const response = await fetch(GEMINI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: conversationHistory
+            })
+        });
+
+        const data = await response.json();
+        
+        // Remove loading indicator
+        removeLoadingIndicator(loadingId);
+        
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
+            const botResponse = data.candidates[0].content.parts[0].text;
+            
+            // Add bot response to conversation history
+            conversationHistory.push({
+                role: "model",
+                parts: [{ text: botResponse }]
+            });
+            
+            // Add bot message to chat
+            addMessageToChat('bot', botResponse);
+        } else {
+            throw new Error('No response from Gemini');
+        }
+    } catch (error) {
+        console.error('Error calling Gemini API:', error);
+        removeLoadingIndicator(loadingId);
+        addMessageToChat('bot', "Sorry, I'm having trouble connecting to the AI service. Please try again later.");
+    }
+}
+
+// Add message to chat UI
+function addMessageToChat(sender, message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${sender}-message mb-3`;
+    
+    const isBot = sender === 'bot';
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    messageDiv.innerHTML = `
+        <div class="d-flex ${isBot ? '' : 'justify-content-end'}">
+            ${isBot ? `
+                <div class="flex-shrink-0 me-2">
+                    <div class="bg-primary text-white rounded-circle p-2" style="width: 36px; height: 36px;">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                </div>
+            ` : ''}
+            <div>
+                <div class="${isBot ? 'bg-light' : 'bg-primary text-white'} rounded p-2">
+                    ${message}
+                </div>
+                <small class="text-muted d-block mt-1 ${isBot ? '' : 'text-end'}">${timestamp}</small>
+            </div>
+            ${!isBot ? `
+                <div class="flex-shrink-0 ms-2">
+                    <div class="bg-secondary text-white rounded-circle p-2" style="width: 36px; height: 36px;">
+                        <i class="fas fa-user"></i>
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Add loading indicator
+function addLoadingIndicator() {
+    const id = 'loading-' + Date.now();
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = id;
+    loadingDiv.className = 'chat-message bot-message mb-3';
+    loadingDiv.innerHTML = `
+        <div class="d-flex">
+            <div class="flex-shrink-0 me-2">
+                <div class="bg-primary text-white rounded-circle p-2" style="width: 36px; height: 36px;">
+                    <i class="fas fa-robot"></i>
+                </div>
+            </div>
+            <div>
+                <div class="bg-light rounded p-2">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <small class="ms-2">Thinking...</small>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.appendChild(loadingDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return id;
+}
+
+// Remove loading indicator
+function removeLoadingIndicator(id) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.remove();
+    }
+}
+
+// Initialize with a welcome message if chat is empty
+if (chatMessages.children.length === 0) {
+    addMessageToChat('bot', "Hello
